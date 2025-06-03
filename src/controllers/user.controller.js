@@ -169,8 +169,9 @@ const logOut = asyncHandler(
 
 )
 
-const refreshAccessToken = asyncHandler(async (res, req) => {
-    const incomeingRefreshToekn = req.body.rereshToken || req.cookie.rereshToken;
+const getrefreshAccessToken = asyncHandler(async (res, req) => {
+    console.log("asdsa",req.body);
+    const incomeingRefreshToekn = req.cookies.rereshToken || req.body.rereshToken;
     if (!incomeingRefreshToekn) {
         throw new ApiError(401, "unthorised token");
     }
@@ -213,4 +214,4 @@ const refreshAccessToken = asyncHandler(async (res, req) => {
 
 });
 
-export { registerUser, loginUser, logOut, refreshAccessToken }
+export { registerUser, loginUser, logOut, getrefreshAccessToken }
