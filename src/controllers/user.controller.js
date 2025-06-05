@@ -4,6 +4,7 @@ import { User } from "../models/user.model.js"
 import { uploadFile } from "../utils/cloudnary.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import jwt from "jsonwebtoken"
+import mongoose from "mongoose"
 
 
 const generateAccessRereshToken = async (userId) => {
@@ -217,10 +218,10 @@ const changeCurrentUserPassword = asyncHandler(
     async (req, res) => {
         const { oldpassword, newpassword } = req.body
 
-        if (!oldpassword ) {
+        if (!oldpassword) {
             throw new ApiError(400, "password is required")
         }
-        if (!newpassword ) {
+        if (!newpassword) {
             throw new ApiError(400, "new password is required")
         }
 
@@ -301,7 +302,7 @@ const updateUserAvtar = asyncHandler(
         return res.status(200).json(
             new ApiResponse(200, images, "Avatar updated successfully")
         )
-})
+    })
 
 const updateUserCover = asyncHandler(
     async (req, res) => {
@@ -329,7 +330,7 @@ const updateUserCover = asyncHandler(
         return res.status(200).json(
             new ApiResponse(200, users, "Cover updated successfully")
         )
-})
+    })
 
 const getUserChannel = asyncHandler(
     async (req, res) => {
@@ -411,6 +412,58 @@ const getUserChannel = asyncHandler(
     }
 )
 
+const getWatchHistroy = asyncHandler(
+    async (req, res) => {
+
+        const user = await User.aggregate([
+            {
+                $match: {
+                    _id: new mongoose.Types.ObjectId(req.user?._id)
+                }
+            },
+            {
+                $lookup: {
+                    from: "Video",
+                    localField: "watchHistory",
+                    foreignField: "_id",
+                    as: "watchHistory",
+                    pipeline: [
+                        {
+                            $lookup: {
+                                from: "User",
+                                localField: "ower",
+                                foreignField: "_id",
+                                as: "ower",
+                                pipeline: [
+                                    {
+                                        $project: {
+                                            fullname: 1,
+                                            username: 1,
+                                            avatar: 1
+                                        }
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            $addFields: {
+                                ower: {
+                                    $first: "$ower"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        ])
+
+        res.status(200)
+            .json(
+                new ApiResponse(200, user[0].watchHistory, "Watch history fetch successfully!")
+            )
+    }
+)
+
 export {
     registerUser,
     loginUser,
@@ -421,5 +474,6 @@ export {
     updateDetails,
     updateUserAvtar,
     updateUserCover,
-    getUserChannel
+    getUserChannel,
+    getWatchHistroy
 }
