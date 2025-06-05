@@ -169,9 +169,8 @@ const logOut = asyncHandler(
 
 )
 
-const getrefreshAccessToken = asyncHandler(async (res, req) => {
-    console.log("asdsa", req.body);
-    const incomeingRefreshToekn = req.cookies.rereshToken || req.body.rereshToken;
+const getrefreshAccessToken = asyncHandler(async (req, res) => {
+    const incomeingRefreshToekn = req.body.rereshToken;
     if (!incomeingRefreshToekn) {
         throw new ApiError(401, "unthorised token");
     }
@@ -181,7 +180,7 @@ const getrefreshAccessToken = asyncHandler(async (res, req) => {
             incomeingRefreshToekn,
             process.env.REFRESH_TOKEN_SECRET
         )
-        const user = await User.findById(decodeToken?._id).select("-password -refreshToken")
+        const user = await User.findById(decodeToken?._id).select("-password")
 
         if (!user) {
             throw new ApiError(401, 'Invlid access refesh token')
@@ -195,30 +194,38 @@ const getrefreshAccessToken = asyncHandler(async (res, req) => {
             httpOnly: true,
             secure: true
         }
-        const { accessToken, refreshToken } = await generateAccessRereshToken(user?._id);
+        const { genreateToken, rereshToken } = await generateAccessRereshToken(user?._id);
 
         return res.status(200)
-            .cookie("genreateToken", accessToken, options)
-            .cookie("rereshToken", refreshToken, options)
+            .cookie("genreateToken", genreateToken, options)
+            .cookie("rereshToken", rereshToken, options)
             .json(
                 new ApiResponse(200,
                     {
-                        accessToken, refreshToken
+                        genreateToken, rereshToken
                     },
                     "Access token refreshd"
                 )
             )
     } catch (error) {
-        throw new ApiError(401, 'something went wrong!')
+        throw new ApiError(401, 'something went wrong!', error)
     }
 
 });
 
 const changeCurrentUserPassword = asyncHandler(
-    async (res, req) => {
+    async (req, res) => {
         const { oldpassword, newpassword } = req.body
 
+        if (!oldpassword ) {
+            throw new ApiError(400, "password is required")
+        }
+        if (!newpassword ) {
+            throw new ApiError(400, "new password is required")
+        }
+
         const user = await User.findById(req.user?._id)
+
         const ispasswordiscorrect = await user.isPasswordCorrect(oldpassword)
 
         if (!ispasswordiscorrect) {
@@ -235,14 +242,14 @@ const changeCurrentUserPassword = asyncHandler(
     }
 )
 
-const getCurrentUser = asyncHandler(async (res, req) => {
+const getCurrentUser = asyncHandler(async (req, res) => {
     return res.status(200).json(
-        200, req.user, "User fetch successfully"
+        new ApiResponse(200, req.user, "User fetch successfully")
     )
 })
 
 const updateDetails = asyncHandler(
-    async (res, req) => {
+    async (req, res) => {
         const { fullname, email } = req.body
         if (!fullname || !email) {
             throw new ApiError(400, "All field is reqiored!")
@@ -294,7 +301,7 @@ const updateUserAvtar = asyncHandler(
         return res.status(200).json(
             new ApiResponse(200, images, "Avatar updated successfully")
         )
-    })
+})
 
 const updateUserCover = asyncHandler(
     async (req, res) => {
@@ -322,7 +329,87 @@ const updateUserCover = asyncHandler(
         return res.status(200).json(
             new ApiResponse(200, users, "Cover updated successfully")
         )
-    })
+})
+
+const getUserChannel = asyncHandler(
+    async (req, res) => {
+        const { username } = req.params
+        if (!username?.trim()) {
+            throw new ApiError(400, "Username is required")
+        }
+
+        // For join and get count
+        const channel = await User.aggregate([
+            {
+                $match: {
+                    username: username?.toLowerCase()
+                },
+            },
+            {
+                // Get Only how many subscriber of user
+                $lookup: {
+                    from: "subscriptions",
+                    localField: "_id",
+                    foreignField: "channel",
+                    as: 'subscriptions'
+                },
+            },
+            {
+                // Get Only how many subscribed current user
+                $lookup: {
+                    from: "subscriptions",
+                    localField: "_id",
+                    foreignField: "subscriber",
+                    as: 'subscriptionTo'
+                },
+            },
+            {
+                // Additional field purpose
+                $addFields: {
+                    // Get count of subscriptions
+                    subscriptionCount: {
+                        $size: "$subscriptions"
+                    },
+                    // Get count for subscriptionTo
+                    subscriptionToCount: {
+                        $size: "$subscriptionTo"
+                    },
+                    isSubScribedTo: {
+                        $cond: {
+                            // If condition statement
+                            // with in statement if user is already subscribed then true truen other wise false.
+                            if: { $in: [req.user?._id, "$subscriptions.subscriber"] },
+                            then: true,
+                            else: false
+                        }
+                    }
+                },
+            },
+            // Only selected filed is return using $project
+            {
+                $project: {
+                    fullname: 1,
+                    username: 1,
+                    subscriptionCount: 1,
+                    subscriptionToCount: 1,
+                    isSubScribedTo: 1,
+                    avatar: 1,
+                    coverImage: 1,
+                    email: 1
+                }
+            }
+        ])
+
+        if (!channel?.length) {
+            throw new ApiError(400, "Something went wrong while fetch getuserchannel")
+        }
+
+        return res.status(200).json(
+            new ApiResponse(200, channel[0], "Fetch date Successfully!")
+        )
+
+    }
+)
 
 export {
     registerUser,
@@ -333,5 +420,6 @@ export {
     getCurrentUser,
     updateDetails,
     updateUserAvtar,
-    updateUserCover
+    updateUserCover,
+    getUserChannel
 }
